@@ -1,17 +1,25 @@
-import puppeteer, { Browser, KeyInput, Page } from "puppeteer";
+import puppeteer from "puppeteer";
+import { Browser, KeyInput, Page } from "puppeteer";
 import fs from "fs";
 
+// General Configs
 const BUDDY_BLITZ_URL =
   "https://staging.spatial.io/s/Kev-Buddy-Blitz-6532d5285b44edc7d53655a8?share=7637321244027357516";
 const IMAGE_FOLDER = "screenshots";
-const DELAY = 10000;
-const INTERVAL = 2000;
+
+// Agent Controls
+const LOADING_GAME_DELAY = 10000;
+const ACTION_INTERVAL = 250;
+const WAIT_ROOM_TIME = 30000;
+const CUT_SCENE_TIME = 12000;
+const TOTAL_RUN_TIME = 150000;
 
 async function closeSpam(page: Page) {
   // Get rid of the character selection screen
   console.log("removing character selection screen");
+  // await page.mouse.click(100, 100)
   await page
-    .locator("button")
+    .locator("button[type=submit]")
     .filter((button) => button.textContent == "Continue")
     .click();
   await new Promise((r) => setTimeout(r, 500));
@@ -30,7 +38,63 @@ async function closeSpam(page: Page) {
   // await new Promise((r) => setTimeout(r, 500));
 }
 
-async function joinGameAndStall(page: Page) {
+async function moveAllDirections(page: Page, interval: number) {
+  // Randomly move forward or backwards
+  const keys: KeyInput[] = ["w", "s"];
+  const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+  await page.keyboard.down(keyToPress);
+
+  // Maybe press 'Space' to jump
+  if (Math.random() >= 0.5) {
+    await page.keyboard.press("Space");
+  }
+
+  // Maybe randomly press 'a' or 'd' for left or right
+  if (Math.random() >= 0.5) {
+    const keys: KeyInput[] = ["a", "d"];
+    const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+    await page.keyboard.press(keyToPress, { delay: interval - 50 });
+  } else {
+    await new Promise((r) => setTimeout(r, interval - 50));
+  }
+
+  await page.keyboard.up(keyToPress);
+}
+
+async function moveForwards(page: Page, interval: number) {
+  // always move forward
+  await page.keyboard.up("w");
+  await page.keyboard.down("w");
+
+  // Maybe press 'Space' to jump
+  if (Math.random() >= 0.5) {
+    await page.keyboard.press("Space");
+  }
+
+  // Maybe Randomly press 'a' or 'd' for left or right
+  if (Math.random() >= 0.5) {
+    const keys: KeyInput[] = ["a", "d"];
+    const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+    await page.keyboard.press(keyToPress, { delay: interval - 50 });
+  } else {
+    await new Promise((r) => setTimeout(r, interval, -50));
+  }
+}
+
+async function playAroundlInWaitroom(page: Page) {
+  const screenshotInterval = setInterval(
+    async () => await moveAllDirections(page, ACTION_INTERVAL),
+    ACTION_INTERVAL
+  );
+
+  setTimeout(() => {
+    clearInterval(screenshotInterval);
+  }, WAIT_ROOM_TIME);
+
+  await new Promise((r) => setTimeout(r, CUT_SCENE_TIME));
+}
+
+async function queueGameAndPlayAround(page: Page) {
   // Get the viewport size
   const viewport = page.viewport();
   if (!viewport) {
@@ -47,26 +111,16 @@ async function joinGameAndStall(page: Page) {
   await page.mouse.click(clickX, clickY, { delay: 500 });
   await page.mouse.click(clickX, clickY, { delay: 500 });
 
-  await new Promise((r) => setTimeout(r, 30000));
+  await playAroundlInWaitroom(page);
 }
 
-async function captureAndInteract(page: Page, dir: string) {
-  const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
-  const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
-  await page.screenshot({ path: screenshotPath });
-  console.log(`Screenshot taken and saved as ${screenshotPath}`);
+async function move(page: Page, dir: string, interval: number) {
+  // const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
+  // const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
+  // await page.screenshot({ path: screenshotPath });
+  // console.log(`Screenshot taken and saved as ${screenshotPath}`);
 
-  // Press and hold 'w' to move forward
-  await page.keyboard.down("w");
-
-  // Pres and hold 'Space' to jump
-  await page.keyboard.press("Space");
-
-  // Randomly press 'a' or 'd' for left or right
-  const keys: KeyInput[] = ["a", "d"];
-  const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-  await page.keyboard.press(keyToPress, { delay: 1900 }); // press for 1900ms
-  await page.keyboard.up("w"); // Release 'w' after pressing the other key
+  await moveForwards(page, interval);
 }
 
 async function gameLoop(browser: Browser, page: Page) {
@@ -79,15 +133,15 @@ async function gameLoop(browser: Browser, page: Page) {
 
   // Set an interval to interact and take a screenshot every 2 seconds
   const screenshotInterval = setInterval(async () => {
-    await captureAndInteract(page, dir);
-  }, INTERVAL);
+    await move(page, dir, ACTION_INTERVAL);
+  }, ACTION_INTERVAL);
 
   // Stop taking screenshots after a minute
   setTimeout(() => {
     clearInterval(screenshotInterval);
     browser.close();
     console.log("Stopped taking screenshots and closed the browser.");
-  }, INTERVAL + DELAY);
+  }, TOTAL_RUN_TIME);
 }
 
 async function start() {
@@ -109,14 +163,14 @@ async function start() {
   // Go to the website
   await page.goto(BUDDY_BLITZ_URL, { waitUntil: "networkidle2" });
 
-  // Wait for DELAY seconds before interacting with the page
-  await new Promise((r) => setTimeout(r, DELAY));
+  // Wait for LOADING_GAME_DELAY seconds before interacting with the page
+  await new Promise((r) => setTimeout(r, LOADING_GAME_DELAY));
 
   // Close modals/popups/etc that we don't care about
   await closeSpam(page);
 
   // Join the game and wait 30 seconds for the join queue to finish
-  await joinGameAndStall(page);
+  await queueGameAndPlayAround(page);
 
   // Start playing game
   await gameLoop(browser, page);
