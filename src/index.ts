@@ -9,10 +9,10 @@ const IMAGE_FOLDER = "screenshots";
 
 // Agent Controls
 const LOADING_GAME_DELAY = 10000;
-const ACTION_INTERVAL = 250;
+const ACTION_INTERVAL = 750;
 const SCREENSHOT_INTERVAL = 3000;
 const WAIT_ROOM_TIME = 30000;
-const CUT_SCENE_TIME = 12000;
+const CUT_SCENE_TIME = 10000;
 const TOTAL_RUN_TIME = 150000;
 
 async function closeSpam(page: Page) {
@@ -39,12 +39,53 @@ async function closeSpam(page: Page) {
   // await new Promise((r) => setTimeout(r, 500));
 }
 
+async function takeScreenShot(page: Page, dir: string) {
+  const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
+  const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
+  await page.screenshot({ path: screenshotPath });
+  console.log(`Screenshot taken and saved as ${screenshotPath}`);
+}
+
+function initScreenShots(page: Page) {
+  // Create a folder for this instance
+  const instance = new Date().toISOString().replace(/[:\.]/g, "-");
+  const dir = `${IMAGE_FOLDER}/${instance}`;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  // Set an interval to take a screenshot every SCREENSHOT_INTERVAL ms
+  const screenshotInterval = setInterval(async () => {
+    await takeScreenShot(page, dir);
+  }, SCREENSHOT_INTERVAL);
+
+  return screenshotInterval;
+}
+
 async function moveAllDirections(page: Page, length: number) {
   // Randomly move forward or backwards
   const keys: KeyInput[] = ["w", "s"];
   const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-  await page.keyboard.up(keyToPress);
   await page.keyboard.down(keyToPress);
+
+  // Maybe press 'Space' to jump
+  if (Math.random() >= 0.75) {
+    await page.keyboard.press("Space");
+  }
+
+  // Maybe randomly press 'a' or 'd' for left or right
+  if (Math.random() >= 0.5) {
+    const keys: KeyInput[] = ["a", "d"];
+    const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+    await page.keyboard.press(keyToPress, { delay: length - 100 });
+  }
+
+  await page.keyboard.up(keyToPress);
+}
+
+async function moveForwards(page: Page, length: number) {
+  // always move forward
+  await page.keyboard.down("w");
 
   // Maybe press 'Space' to jump
   if (Math.random() >= 0.5) {
@@ -55,26 +96,10 @@ async function moveAllDirections(page: Page, length: number) {
   if (Math.random() >= 0.5) {
     const keys: KeyInput[] = ["a", "d"];
     const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-    await page.keyboard.press(keyToPress, { delay: length });
+    await page.keyboard.press(keyToPress, { delay: length - 100 });
   }
-}
 
-async function moveForwards(page: Page, length: number) {
-  // always move forward
   await page.keyboard.up("w");
-  await page.keyboard.down("w");
-
-  // Maybe press 'Space' to jump
-  if (Math.random() >= 0.5) {
-    await page.keyboard.press("Space");
-  }
-
-  // Maybe Randomly press 'a' or 'd' for left or right
-  if (Math.random() >= 0.5) {
-    const keys: KeyInput[] = ["a", "d"];
-    const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-    await page.keyboard.press(keyToPress, { delay: length });
-  }
 }
 
 async function move(page: Page, length: number) {
@@ -82,16 +107,28 @@ async function move(page: Page, length: number) {
 }
 
 async function playAroundlInWaitroom(page: Page) {
-  const screenshotInterval = setInterval(
+  console.log("Playing around in waitroom");
+
+  // Set an interval to take a move every ACTION_INTERVAL ms
+  const moveInterval = setInterval(
     async () => await moveAllDirections(page, ACTION_INTERVAL),
     ACTION_INTERVAL
   );
 
-  setTimeout(() => {
-    clearInterval(screenshotInterval);
-  }, WAIT_ROOM_TIME);
+  // Wait for waitroom to finish
+  console.log("Waiting for waitroom to finish");
+  await new Promise((r) =>
+    setTimeout(() => {
+      clearInterval(moveInterval);
+      console.log("Done waiting in waitroom");
+      r(true);
+    }, WAIT_ROOM_TIME)
+  );
 
+  // Do nothing while cutscene is playing
+  console.log("Waiting for cutscene to finish");
   await new Promise((r) => setTimeout(r, CUT_SCENE_TIME));
+  console.log("Done waiting for cutscene to finish");
 }
 
 async function queueGameAndPlayAround(page: Page) {
@@ -107,47 +144,29 @@ async function queueGameAndPlayAround(page: Page) {
 
   // Join a game queue
   console.log("JOINING GAME");
-  await page.mouse.click(clickX, clickY, { delay: 500 });
-  await page.mouse.click(clickX, clickY, { delay: 500 });
-  await page.mouse.click(clickX, clickY, { delay: 500 });
-  await page.mouse.click(clickX, clickY, { delay: 500 });
-  await page.mouse.click(clickX, clickY, { delay: 500 });
+  await page.mouse.click(clickX, clickY, { delay: 600 });
+  await page.mouse.click(clickX, clickY, { delay: 600 });
 
   await playAroundlInWaitroom(page);
 }
 
-async function takeScreenShot(page: Page, dir: string) {
-  const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
-  const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
-  await page.screenshot({ path: screenshotPath });
-  console.log(`Screenshot taken and saved as ${screenshotPath}`);
-}
-
 async function gameLoop(browser: Browser, page: Page) {
-  // Create a folder for this instance
-  const instance = new Date().toISOString().replace(/[:\.]/g, "-");
-  const dir = `${IMAGE_FOLDER}/${instance}`;
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  console.log("Starting game loop");
 
-  // Set an interval to move every ACTION_INTERVAL seconds
-  const moveIntervatl = setInterval(async () => {
+  // Set an interval to move every ACTION_INTERVAL ms
+  const moveInterval = setInterval(async () => {
     await move(page, ACTION_INTERVAL);
   }, ACTION_INTERVAL);
 
-  // Set an interval to take a screenshot every SCREENSHOT_INTERVAL seconds
-  const screenshotInterval = setInterval(async () => {
-    await takeScreenShot(page, dir);
-  }, SCREENSHOT_INTERVAL);
-
   // Stop taking screenshots after a minute
-  setTimeout(() => {
-    clearInterval(moveIntervatl);
-    clearInterval(screenshotInterval);
-    browser.close();
-    console.log("Stopped taking screenshots and closed the browser.");
-  }, TOTAL_RUN_TIME);
+  await new Promise((resolve) =>
+    setTimeout(() => {
+      clearInterval(moveInterval);
+      browser.close();
+      console.log("Stopped bot and closed the browser.");
+      resolve(true);
+    }, TOTAL_RUN_TIME)
+  );
 }
 
 async function start() {
@@ -163,17 +182,23 @@ async function start() {
   console.log(`Going to ${BUDDY_BLITZ_URL}`);
   await page.goto(BUDDY_BLITZ_URL, { waitUntil: "networkidle2" });
 
-  // Wait for LOADING_GAME_DELAY seconds before interacting with the page
+  // Wait for LOADING_GAME_DELAY ms before interacting with the page
   await new Promise((r) => setTimeout(r, LOADING_GAME_DELAY));
 
   // Close modals/popups/etc that we don't care about
   await closeSpam(page);
 
-  // Join the game and wait 30 seconds for the join queue to finish
+  // Start taking screenshots every SCREENSHOT_INTERVAL ms
+  const screenshotInterval = initScreenShots(page);
+
+  // Join the game and wait WAIT_ROOM_TIME + CUT_SCENE_TIME ms for the join queue and cutscene to finish
   await queueGameAndPlayAround(page);
 
   // Start playing game
   await gameLoop(browser, page);
+
+  // Stop taking screenshots
+  clearInterval(screenshotInterval);
 }
 
 start();
