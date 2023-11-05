@@ -10,6 +10,7 @@ const IMAGE_FOLDER = "screenshots";
 // Agent Controls
 const LOADING_GAME_DELAY = 10000;
 const ACTION_INTERVAL = 250;
+const SCREENSHOT_INTERVAL = 3000;
 const WAIT_ROOM_TIME = 30000;
 const CUT_SCENE_TIME = 12000;
 const TOTAL_RUN_TIME = 150000;
@@ -38,10 +39,11 @@ async function closeSpam(page: Page) {
   // await new Promise((r) => setTimeout(r, 500));
 }
 
-async function moveAllDirections(page: Page, interval: number) {
+async function moveAllDirections(page: Page, length: number) {
   // Randomly move forward or backwards
   const keys: KeyInput[] = ["w", "s"];
   const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+  await page.keyboard.up(keyToPress);
   await page.keyboard.down(keyToPress);
 
   // Maybe press 'Space' to jump
@@ -53,15 +55,11 @@ async function moveAllDirections(page: Page, interval: number) {
   if (Math.random() >= 0.5) {
     const keys: KeyInput[] = ["a", "d"];
     const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-    await page.keyboard.press(keyToPress, { delay: interval - 50 });
-  } else {
-    await new Promise((r) => setTimeout(r, interval - 50));
+    await page.keyboard.press(keyToPress, { delay: length });
   }
-
-  await page.keyboard.up(keyToPress);
 }
 
-async function moveForwards(page: Page, interval: number) {
+async function moveForwards(page: Page, length: number) {
   // always move forward
   await page.keyboard.up("w");
   await page.keyboard.down("w");
@@ -75,10 +73,12 @@ async function moveForwards(page: Page, interval: number) {
   if (Math.random() >= 0.5) {
     const keys: KeyInput[] = ["a", "d"];
     const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-    await page.keyboard.press(keyToPress, { delay: interval - 50 });
-  } else {
-    await new Promise((r) => setTimeout(r, interval, -50));
+    await page.keyboard.press(keyToPress, { delay: length });
   }
+}
+
+async function move(page: Page, length: number) {
+  await moveForwards(page, length);
 }
 
 async function playAroundlInWaitroom(page: Page) {
@@ -110,17 +110,17 @@ async function queueGameAndPlayAround(page: Page) {
   await page.mouse.click(clickX, clickY, { delay: 500 });
   await page.mouse.click(clickX, clickY, { delay: 500 });
   await page.mouse.click(clickX, clickY, { delay: 500 });
+  await page.mouse.click(clickX, clickY, { delay: 500 });
+  await page.mouse.click(clickX, clickY, { delay: 500 });
 
   await playAroundlInWaitroom(page);
 }
 
-async function move(page: Page, dir: string, interval: number) {
-  // const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
-  // const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
-  // await page.screenshot({ path: screenshotPath });
-  // console.log(`Screenshot taken and saved as ${screenshotPath}`);
-
-  await moveForwards(page, interval);
+async function takeScreenShot(page: Page, dir: string) {
+  const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
+  const screenshotPath = `${dir}/screenshot-${timestamp}.png`;
+  await page.screenshot({ path: screenshotPath });
+  console.log(`Screenshot taken and saved as ${screenshotPath}`);
 }
 
 async function gameLoop(browser: Browser, page: Page) {
@@ -131,13 +131,19 @@ async function gameLoop(browser: Browser, page: Page) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Set an interval to interact and take a screenshot every 2 seconds
-  const screenshotInterval = setInterval(async () => {
-    await move(page, dir, ACTION_INTERVAL);
+  // Set an interval to move every ACTION_INTERVAL seconds
+  const moveIntervatl = setInterval(async () => {
+    await move(page, ACTION_INTERVAL);
   }, ACTION_INTERVAL);
+
+  // Set an interval to take a screenshot every SCREENSHOT_INTERVAL seconds
+  const screenshotInterval = setInterval(async () => {
+    await takeScreenShot(page, dir);
+  }, SCREENSHOT_INTERVAL);
 
   // Stop taking screenshots after a minute
   setTimeout(() => {
+    clearInterval(moveIntervatl);
     clearInterval(screenshotInterval);
     browser.close();
     console.log("Stopped taking screenshots and closed the browser.");
@@ -146,21 +152,15 @@ async function gameLoop(browser: Browser, page: Page) {
 
 async function start() {
   // Launch the browser
+  console.log("Launching Browser");
+  const browser = await puppeteer.launch({ headless: "new" });
   // const browser = await puppeteer.launch({
-  //   headless: "new",
-  //   args: [
-  //     "--use-gl=angle",
-  //     "--use-angle=gl",
-  //     "--disable-web-security",
-  //     "--enable-unsafe-webgpu",
-  //   ],
+  //   headless: false,
   // });
-  const browser = await puppeteer.launch({
-    headless: false,
-  });
   const page = await browser.newPage();
 
   // Go to the website
+  console.log(`Going to ${BUDDY_BLITZ_URL}`);
   await page.goto(BUDDY_BLITZ_URL, { waitUntil: "networkidle2" });
 
   // Wait for LOADING_GAME_DELAY seconds before interacting with the page
