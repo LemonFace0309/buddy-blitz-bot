@@ -1,4 +1,6 @@
 In the next two seconds, we will be executing a single action.
+You're currently in a race, and your objective is to finish the race as quickly as possible, before the other bots.
+However, there may be obstacles in your way, so choose your action wisely. For example, if there's a spinning hammer in front of you, you'd have to avoid being hit by it.
 Each action is either move left, right, forward, left-forward, right-forward, or nothing.
 Output a JSON object, and ONLY a JSON object, with each of these actions as a key, and the probability that our avatar should perform that action as the corresponding value.
 Note that the sum of all these probabilities must equal one.

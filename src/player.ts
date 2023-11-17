@@ -5,13 +5,17 @@ import { KeyInput, Page } from "puppeteer";
 import OpenAI from "openai";
 import "dotenv/config";
 
-import { sleep } from "./utils";
+import { nonBlockingWhile, sleep } from "./utils";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const WAIT_ROOM_ACTION_INTERVAL = 600;
+const SLIDE_DELAY_AFTER_JUMP = 250;
 
-const PROMPT = fs.readFileSync(path.join(__dirname, "prompt.txt"), "utf-8");
+const PROMPT = fs.readFileSync(
+  path.join(process.cwd(), "src", "prompt.txt"),
+  "utf-8"
+);
 
 type RandomAction =
   | "left"
@@ -31,6 +35,7 @@ type ActionProbabilities = RandomActionProbabilities &
 export class Player {
   page: Page;
   openai: OpenAI;
+  isZooming: boolean = false;
 
   constructor(page: Page) {
     if (!OPENAI_API_KEY) {
@@ -87,103 +92,13 @@ export class Player {
     console.log("Done waiting for cutscene to finish");
   }
 
-  public async zoom(intervalMs: number) {
-    // Todo: abstract later
-    // const instance = new Date().toISOString().replace(/[:\.]/g, "-");
-    // const screenshotDir = `./screenshots/${instance}`;
+  public async initNaeNae(intervalMs: number) {
+    this.isZooming = true;
+    this.naenae(intervalMs);
+  }
 
-    for (let i = 0; i < 100; i++) {
-      // Todo: abstract later
-      // const timestamp = new Date().toISOString().replace(/[:\.]/g, "-");
-      // const screenshotPath = `${screenshotDir}/screenshot-${timestamp}.png`;
-      const screenshot = await this.page.screenshot();
-      const base64Screenshot = screenshot.toString("base64");
-
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-4-vision-preview",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a bot for Buddy Blitz, a simulation I'm developed. You are designed to output JSON, and only JSON",
-          },
-          {
-            role: "system",
-            content:
-              "I've taken a screenshot of what the current screen looks like. You are controlling ths white avatar in the centre of the screen.",
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: PROMPT },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${base64Screenshot}`,
-                },
-              },
-            ],
-          },
-        ],
-      });
-
-      const content = response.choices[0].message.content;
-      if (!content) {
-        console.log("Failed to get response from AI");
-        continue;
-      } else {
-        console.log("AI RESPONSE:", content);
-      }
-
-      const possibleActions: ActionProbabilities = JSON.parse(content);
-      const jump = possibleActions.jump;
-      const selectedAction = this.selectAction(possibleActions);
-
-      const selectedKeys: KeyInput[] = [];
-
-      console.log("SELECTED ACTION:", selectedAction);
-      switch (selectedAction) {
-        case "left":
-          selectedKeys.push("a");
-          break;
-        case "right":
-          selectedKeys.push("d");
-          break;
-        case "forward":
-          selectedKeys.push("w");
-          break;
-        case "left-forward":
-          selectedKeys.push("w");
-          selectedKeys.push("a");
-          break;
-        case "right-forward":
-          selectedKeys.push("w");
-          selectedKeys.push("d");
-          break;
-        case "nothing":
-          break;
-        default:
-          throw new Error("Invalid action");
-      }
-
-      for (const key of selectedKeys) {
-        await this.page.keyboard.down(key);
-      }
-
-      let RightClickDelayMs = 0;
-      if (jump) {
-        RightClickDelayMs = 250;
-        await this.page.keyboard.press("Space");
-        await sleep(RightClickDelayMs);
-        await this.page.mouse.click(100, 100, { button: "right" });
-      }
-
-      await sleep(intervalMs - RightClickDelayMs);
-
-      for (const key of selectedKeys) {
-        await this.page.keyboard.up(key);
-      }
-    }
+  public async chillOut() {
+    this.isZooming = false;
   }
 
   public async race(intervalMs: number, lifeSpanMs: number) {
@@ -201,6 +116,116 @@ export class Player {
     // Kill the bot
     clearInterval(moveInterval);
     await this.page.keyboard.up("w");
+  }
+
+  async naenae(intervalMs: number) {
+    await nonBlockingWhile(
+      () => this.isZooming,
+      async () => {
+        const screenshotBase64 = await this.page.screenshot({
+          encoding: "base64",
+          type: "jpeg",
+        });
+
+        await this.page.keyboard.down("w");
+
+        let response: OpenAI.Chat.Completions.ChatCompletion | undefined =
+          undefined;
+
+        const getResponse = async () => {
+          response = await this.promptVisionGpt4(screenshotBase64);
+        };
+        const jumpAndSlide = async () => {
+          await this.page.keyboard.press("Space");
+          await sleep(SLIDE_DELAY_AFTER_JUMP);
+          await this.page.mouse.click(100, 100, { button: "right" });
+          await sleep(500);
+        };
+        await Promise.all([getResponse(), jumpAndSlide()]);
+
+        await this.page.keyboard.up("w");
+
+        if (typeof response == "undefined") {
+          console.log("Failed to get response from AI");
+          return;
+        } else {
+          response = response as OpenAI.Chat.Completions.ChatCompletion;
+          console.log("AI RESPONSE:", response);
+        }
+
+        console.log("RESPONSE:");
+        console.dir(response, { depth: 8 });
+
+        const content = response.choices[0].message.content;
+        if (!content) {
+          console.log("Failed to get response from AI");
+          return;
+        } else {
+          console.log("AI RESPONSE:", content);
+        }
+
+        let jsonContent = content.substring(
+          content.indexOf("{"),
+          content.indexOf("}") + 1
+        );
+        jsonContent.replaceAll("\\", "");
+
+        let possibleActions: ActionProbabilities;
+        try {
+          possibleActions = JSON.parse(jsonContent);
+        } catch (err) {
+          console.log("Failed to parse JSON:", jsonContent);
+          return;
+        }
+        const jump = possibleActions.jump;
+        const selectedAction = this.selectAction(possibleActions);
+
+        const selectedKeys: KeyInput[] = [];
+
+        console.log("SELECTED ACTION:", selectedAction);
+        switch (selectedAction) {
+          case "left":
+            selectedKeys.push("a");
+            break;
+          case "right":
+            selectedKeys.push("d");
+            break;
+          case "forward":
+            selectedKeys.push("w");
+            break;
+          case "left-forward":
+            selectedKeys.push("w");
+            selectedKeys.push("a");
+            break;
+          case "right-forward":
+            selectedKeys.push("w");
+            selectedKeys.push("d");
+            break;
+          case "nothing":
+            break;
+          default:
+            throw new Error("Invalid action");
+        }
+
+        for (const key of selectedKeys) {
+          await this.page.keyboard.down(key);
+        }
+
+        let RightClickDelayMs = 0;
+        if (jump) {
+          RightClickDelayMs = SLIDE_DELAY_AFTER_JUMP;
+          await this.page.keyboard.press("Space");
+          await sleep(RightClickDelayMs);
+          await this.page.mouse.click(100, 100, { button: "right" });
+        }
+
+        await sleep(intervalMs - RightClickDelayMs);
+
+        for (const key of selectedKeys) {
+          await this.page.keyboard.up(key);
+        }
+      }
+    );
   }
 
   selectAction(probabilities: RandomActionProbabilities): RandomAction {
@@ -223,6 +248,41 @@ export class Player {
       }
     }
     return probArray[probArray.length - 1][0];
+  }
+
+  async promptVisionGpt4(
+    screenshotBase64: string
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+    console.log("Prompting GPT-4 Vision");
+    const response = await this.openai.chat.completions.create({
+      model: "gpt-4-vision-preview",
+      max_tokens: 512,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a bot for Buddy Blitz, a simulation I'm developed. You are designed to output JSON, and only JSON",
+        },
+        {
+          role: "system",
+          content:
+            "I've taken a screenshot of what the current screen looks like. You are controlling ths white avatar in the centre of the screen.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${screenshotBase64}`,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    return response;
   }
 
   isRandomAction(action: string): action is RandomAction {
