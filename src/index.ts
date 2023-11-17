@@ -10,19 +10,19 @@ const IMAGE_FOLDER = "screenshots";
 
 // Agent Controls
 const LOADING_GAME_DELAY = 50000;
-const ACTION_INTERVAL = 750;
-const SCREENSHOT_INTERVAL = 5000;
+const ACTION_INTERVAL = 2000;
+const SCREENSHOT_INTERVAL = 2000;
 const PLAYER_LIFE_SPAN = 150000;
-const WAIT_ROOM_TIME = 31000;
+const WAIT_ROOM_TIME = 11000;
 const CUT_SCENE_TIME = 12000;
 
 async function start() {
   // Launch the browser
   console.log("Launching Browser");
-  const browser = await puppeteer.launch({ headless: "new" });
-  // const browser = await puppeteer.launch({
-  //   headless: false,
-  // });
+  // const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({
+    headless: false,
+  });
   const page = await browser.newPage();
 
   // Go to the website and wait for everything to load
@@ -47,7 +47,8 @@ async function start() {
   await player.waitroom(WAIT_ROOM_TIME, CUT_SCENE_TIME);
 
   // Let the bot run for its lifespan
-  await player.race(ACTION_INTERVAL, PLAYER_LIFE_SPAN);
+  // await player.race(ACTION_INTERVAL, PLAYER_LIFE_SPAN);
+  await player.zoom(ACTION_INTERVAL);
 
   // Stop taking screenshots
   client.endCapture();
@@ -60,19 +61,21 @@ function createWorker() {
   return new Worker(__filename);
 }
 
-if (isMainThread) {
-  console.log('Starting the main thread');
-  // Creating 3 worker threads
-  for (let i = 0; i < 3; i++) {
-    createWorker().on('message', (msg) => {
-      try {
-        start()
-      } catch (err) {
-        console.log(`Worker ${i} failed with error: ${err}`);
-      }
-    });
-  }
-} else {
-  // Worker thread logic
-  parentPort?.postMessage('Worker thread is running console.log');
-}
+// if (isMainThread) {
+//   console.log('Starting the main thread');
+//   // Creating 3 worker threads
+//   for (let i = 0; i < 3; i++) {
+//     createWorker().on('message', (msg) => {
+//       try {
+//         start()
+//       } catch (err) {
+//         console.log(`Worker ${i} failed with error: ${err}`);
+//       }
+//     });
+//   }
+// } else {
+//   // Worker thread logic
+//   parentPort?.postMessage('Worker thread is running console.log');
+// }
+
+start()

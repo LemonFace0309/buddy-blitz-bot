@@ -1,0 +1,24 @@
+In the next two seconds, we will be executing a single action.
+Each action is either move left, right, forward, left-forward, right-forward, or nothing.
+Output a JSON object, and ONLY a JSON object, with each of these actions as a key, and the probability that our avatar should perform that action as the corresponding value.
+Note that the sum of all these probabilities must equal one.
+Also include in the JSON object if the avatar should jump as a boolean.
+An example of a JSON object is shown below:
+
+{
+  "left": 0.12,
+  "right": 0,
+  "forward": 0.1,
+  "left-forward": 0.62,
+  "right-forward": 0.04,
+  "nothing": 0.12,
+  "jump": false
+}
+
+Here, our avatar has a 12% chance of moving directly to the left,
+a 0% chance of moving directly to the right,
+a 10% chance of moving directly forward,
+a 62% chance of moving diagonally forward and to the left
+a 4% chance of moving diagonally forward and to the right,
+and a 12% chance of doing nothing.
+The avatar will also not jump while performing this action.
