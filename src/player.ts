@@ -57,7 +57,7 @@ export class Player {
     // Join a game queue
 
     console.log("QUEUEING GAME");
-    await this.page.keyboard.press("j");
+    await this.page.keyboard.press("j", { delay: 650 });
 
     // const viewport = this.page.viewport();
     // if (!viewport) {
@@ -89,7 +89,7 @@ export class Player {
       await this.page.keyboard.down(keyToPress);
 
       // Maybe press 'Space' to jump
-      if (Math.random() >= 0.75) {
+      if (Math.random() >= 0.5) {
         await this.page.keyboard.press("Space");
       }
 
@@ -107,7 +107,8 @@ export class Player {
   public async claimRewards() {
     console.log("Rewards Screen");
     this.currentState = PlayerState.Idle;
-    await this.page.mouse.click(100, 100, { delay: 500, count: 3 });
+    await sleep(15000);
+    await this.page.mouse.click(100, 100, { delay: 500, count: 5 });
   }
 
   public async race(intervalMs: number) {

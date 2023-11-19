@@ -86,9 +86,6 @@ export class Client {
   }
 
   private async enterDragToRotate() {
-    console.log("entering drag to rotate");
-    await this.page.keyboard.press("g", { delay: 250 });
-
     // Set timeout so we don't loop infinitely
     const timeout = setTimeout(() => {
       throw new Error("Timeout: Could not enter drag to rotate");
@@ -96,7 +93,9 @@ export class Client {
 
     // Keep checking DOM if button exists. Once it's there, close it.
     // Loop until we can find the button
+    console.log("entering drag to rotate");
     while (true) {
+      await this.page.keyboard.press("g", { delay: 250 });
       const isFound = await this.page.evaluate((text) => {
         const buttons = Array.from(document.querySelectorAll("button"));
         const targetButton = buttons.find((button) =>

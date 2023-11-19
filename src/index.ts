@@ -45,11 +45,9 @@ async function start() {
 
   // Start tutorial
   console.log("Starting Tutorial");
-  player.race(1200);
+  player.race(1000);
 
   page.on("console", async (msg) => {
-    console.log("MESSAGE: ", msg.text());
-
     // Rewards Screen
     if (
       msg.text().includes(CONSOLE_PREFIX + CONSOLE_RESULTS_SCREEN_WIN) ||
@@ -59,7 +57,8 @@ async function start() {
 
       // No console message for entering waitroom yet, so just manually go there
       player.degen();
-      player.queueGame();
+      await sleep(10000);
+      await player.queueGame();
     }
 
     // Loading Screen
