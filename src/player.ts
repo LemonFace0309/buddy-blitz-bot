@@ -9,8 +9,7 @@ import { nonBlockingWhile, sleep } from "./utils";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const WAIT_ROOM_ACTION_INTERVAL = 600;
-const SLIDE_DELAY_AFTER_JUMP = 250;
+const SLIDE_DELAY_AFTER_JUMP = 500;
 
 const PROMPT = fs.readFileSync(
   path.join(process.cwd(), "src", "prompt.txt"),
@@ -32,10 +31,17 @@ type ControlledActionProbabilities = Record<ControlledAction, number>;
 type ActionProbabilities = RandomActionProbabilities &
   ControlledActionProbabilities;
 
+enum PlayerState {
+  Idle,
+  Degen,
+  Racing,
+  RacingWithGpt4,
+}
+
 export class Player {
   page: Page;
   openai: OpenAI;
-  isZooming: boolean = false;
+  currentState: PlayerState;
 
   constructor(page: Page) {
     if (!OPENAI_API_KEY) {
@@ -43,13 +49,14 @@ export class Player {
     }
 
     this.page = page;
+    this.currentState = PlayerState.Idle;
     this.openai = new OpenAI({ apiKey: OPENAI_API_KEY });
   }
 
   public async queueGame() {
     // Join a game queue
 
-    console.log("JOINING GAME");
+    console.log("QUEUEING GAME");
     await this.page.keyboard.press("j");
 
     // const viewport = this.page.viewport();
@@ -67,60 +74,72 @@ export class Player {
     // await this.page.mouse.click(clickX, clickY, { delay: 650 });
   }
 
-  public async waitroom(waitRoomTime: number, cutSceneTime: number) {
-    console.log("Playing around in waitroom");
-
-    // Set an interval to take a move every actionIntervalMs
-    const moveInterval = setInterval(
-      async () => await this.moveAllDirections(WAIT_ROOM_ACTION_INTERVAL),
-      WAIT_ROOM_ACTION_INTERVAL
-    );
-
-    // Wait for waitroom to finish
-    console.log("Waiting for waitroom to finish");
-    await new Promise((r) =>
-      setTimeout(() => {
-        clearInterval(moveInterval);
-        console.log("Done waiting in waitroom");
-        r(true);
-      }, waitRoomTime)
-    );
-
-    // Do nothing while cutscene is playing
-    console.log("Waiting for cutscene to finish");
-    await new Promise((r) => setTimeout(r, cutSceneTime));
-    console.log("Done waiting for cutscene to finish");
+  public async idle() {
+    console.log("Idle");
+    this.currentState = PlayerState.Idle;
   }
 
-  public async initNaeNae(intervalMs: number) {
-    this.isZooming = true;
-    this.naenae(intervalMs);
+  public async degen() {
+    console.log("Degen");
+    this.currentState = PlayerState.Degen;
+    nonBlockingWhile(this.currentState == PlayerState.Degen, async () => {
+      // Randomly move forward or backwards
+      const keys: KeyInput[] = ["w", "s"];
+      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+      await this.page.keyboard.down(keyToPress);
+
+      // Maybe press 'Space' to jump
+      if (Math.random() >= 0.75) {
+        await this.page.keyboard.press("Space");
+      }
+
+      // Maybe randomly press 'a' or 'd' for left or right
+      if (Math.random() >= 0.5) {
+        const keys: KeyInput[] = ["a", "d"];
+        const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+        await this.page.keyboard.press(keyToPress, { delay: 300 });
+      }
+
+      await this.page.keyboard.up(keyToPress);
+    });
   }
 
-  public async chillOut() {
-    this.isZooming = false;
+  public async claimRewards() {
+    console.log("Rewards Screen");
+    this.currentState = PlayerState.Idle;
+    await this.page.mouse.click(100, 100, { delay: 500, count: 3 });
   }
 
-  public async race(intervalMs: number, lifeSpanMs: number) {
-    // always move forward
-    await this.page.keyboard.down("w");
+  public async race(intervalMs: number) {
+    console.log("RUNNING FORWARDS");
+    this.currentState = PlayerState.Racing;
+    nonBlockingWhile(this.currentState == PlayerState.Racing, async () => {
+      await this.page.keyboard.down("w");
 
-    // Set an interval to move every ACTION_INTERVAL ms
-    const moveInterval = setInterval(async () => {
-      await this.moveSideways(intervalMs);
-    }, intervalMs);
+      // Maybe press 'Space' to jump
+      if (Math.random() >= 0.7) {
+        await this.page.keyboard.press("Space", { delay: 250 });
+        await this.page.mouse.click(100, 100, { button: "right", delay: 650 });
+      }
 
-    // Let the bot run for its lifespan
-    await new Promise((r) => setTimeout(r, lifeSpanMs));
+      // Maybe randomly press 'a' or 'd' for left or right
+      if (Math.random() >= 0.8) {
+        const keys: KeyInput[] = ["a", "d"];
+        const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+        await this.page.keyboard.press(keyToPress, { delay: intervalMs });
+      } else {
+        await sleep(intervalMs);
+      }
 
-    // Kill the bot
-    clearInterval(moveInterval);
-    await this.page.keyboard.up("w");
+      await this.page.keyboard.up("w");
+    });
   }
 
-  async naenae(intervalMs: number) {
-    await nonBlockingWhile(
-      () => this.isZooming,
+  public async raceWithGpt4(intervalMs: number) {
+    console.log("RACING WITH GPT-4");
+    this.currentState = PlayerState.RacingWithGpt4;
+    nonBlockingWhile(
+      this.currentState == PlayerState.RacingWithGpt4,
       async () => {
         const screenshotBase64 = await this.page.screenshot({
           encoding: "base64",
@@ -142,8 +161,6 @@ export class Player {
           await sleep(500);
         };
         await Promise.all([getResponse(), jumpAndSlide()]);
-
-        await this.page.keyboard.up("w");
 
         if (typeof response == "undefined") {
           console.log("Failed to get response from AI");
@@ -207,6 +224,8 @@ export class Player {
             throw new Error("Invalid action");
         }
 
+        await this.page.keyboard.up("w");
+
         for (const key of selectedKeys) {
           await this.page.keyboard.down(key);
         }
@@ -228,7 +247,20 @@ export class Player {
     );
   }
 
-  selectAction(probabilities: RandomActionProbabilities): RandomAction {
+  private isRandomAction(action: string): action is RandomAction {
+    // super unmaintainble. Refactor later
+    const validActions: RandomAction[] = [
+      "left",
+      "right",
+      "forward",
+      "left-forward",
+      "right-forward",
+      "nothing",
+    ];
+    return validActions.includes(action as RandomAction);
+  }
+
+  private selectAction(probabilities: RandomActionProbabilities): RandomAction {
     const entries = Object.entries(probabilities);
 
     let totalProb = 0;
@@ -250,7 +282,7 @@ export class Player {
     return probArray[probArray.length - 1][0];
   }
 
-  async promptVisionGpt4(
+  private async promptVisionGpt4(
     screenshotBase64: string
   ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
     console.log("Prompting GPT-4 Vision");
@@ -283,72 +315,5 @@ export class Player {
       ],
     });
     return response;
-  }
-
-  isRandomAction(action: string): action is RandomAction {
-    // super unmaintainble. Refactor later
-    const validActions: RandomAction[] = [
-      "left",
-      "right",
-      "forward",
-      "left-forward",
-      "right-forward",
-      "nothing",
-    ];
-    return validActions.includes(action as RandomAction);
-  }
-
-  async moveAllDirections(lenMs: number) {
-    // Randomly move forward or backwards
-    const keys: KeyInput[] = ["w", "s"];
-    const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-    await this.page.keyboard.down(keyToPress);
-
-    // Maybe press 'Space' to jump
-    if (Math.random() >= 0.75) {
-      await this.page.keyboard.press("Space");
-    }
-
-    // Maybe randomly press 'a' or 'd' for left or right
-    if (Math.random() >= 0.5) {
-      const keys: KeyInput[] = ["a", "d"];
-      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-      await this.page.keyboard.press(keyToPress, { delay: lenMs - 50 });
-    }
-
-    await this.page.keyboard.up(keyToPress);
-  }
-
-  async moveForwards(lenMs: number) {
-    // always move forward
-    await this.page.keyboard.down("w");
-
-    // Maybe press 'Space' to jump
-    if (Math.random() >= 0.5) {
-      await this.page.keyboard.press("Space");
-    }
-
-    // Maybe randomly press 'a' or 'd' for left or right
-    if (Math.random() >= 0.5) {
-      const keys: KeyInput[] = ["a", "d"];
-      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-      await this.page.keyboard.press(keyToPress, { delay: lenMs - 100 });
-    }
-
-    await this.page.keyboard.up("w");
-  }
-
-  async moveSideways(lenMs: number) {
-    // Maybe press 'Space' to jump
-    if (Math.random() >= 0.5) {
-      await this.page.keyboard.press("Space");
-    }
-
-    // Maybe randomly press 'a' or 'd' for left or right
-    if (Math.random() >= 0.5) {
-      const keys: KeyInput[] = ["a", "d"];
-      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-      await this.page.keyboard.press(keyToPress, { delay: lenMs - 100 });
-    }
   }
 }
