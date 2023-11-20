@@ -13,6 +13,7 @@ An example of a JSON object is shown below:
   "forward": 0.1,
   "left-forward": 0.62,
   "right-forward": 0.04,
+  "backwards": 0,
   "nothing": 0.12,
   "jump": false
 }

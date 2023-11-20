@@ -3,10 +3,10 @@ export function sleep(ms: number): Promise<void> {
 }
 
 export async function nonBlockingWhile(
-  condition: boolean,
+  condition: () => boolean,
   task: () => Promise<void>
 ) {
-  while (condition) {
+  while (condition()) {
     await task();
     await new Promise((resolve) => setTimeout(resolve, 0)); // Yield control
   }

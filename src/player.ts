@@ -9,8 +9,6 @@ import { nonBlockingWhile, sleep } from "./utils";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const SLIDE_DELAY_AFTER_JUMP = 500;
-
 const PROMPT = fs.readFileSync(
   path.join(process.cwd(), "src", "prompt.txt"),
   "utf-8"
@@ -22,6 +20,7 @@ type RandomAction =
   | "forward"
   | "left-forward"
   | "right-forward"
+  | "backwards"
   | "nothing";
 type ControlledAction = "jump";
 
@@ -82,7 +81,7 @@ export class Player {
   public async degen() {
     console.log("Degen");
     this.currentState = PlayerState.Degen;
-    nonBlockingWhile(this.currentState == PlayerState.Degen, async () => {
+    nonBlockingWhile(() => this.currentState == PlayerState.Degen, async () => {
       // Randomly move forward or backwards
       const keys: KeyInput[] = ["w", "s"];
       const keyToPress = keys[Math.floor(Math.random() * keys.length)];
@@ -108,17 +107,19 @@ export class Player {
     console.log("Rewards Screen");
     this.currentState = PlayerState.Idle;
     await sleep(15000);
-    await this.page.mouse.click(100, 100, { delay: 500, count: 5 });
+    await this.page.mouse.click(500, 500, { delay: 500 });
+    await this.page.mouse.click(500, 500, { delay: 500 });
+    await this.page.mouse.click(500, 500, { delay: 500 });
   }
 
   public async race(intervalMs: number) {
     console.log("RUNNING FORWARDS");
     this.currentState = PlayerState.Racing;
-    nonBlockingWhile(this.currentState == PlayerState.Racing, async () => {
+    nonBlockingWhile(() => this.currentState == PlayerState.Racing, async () => {
       await this.page.keyboard.down("w");
 
       // Maybe press 'Space' to jump
-      if (Math.random() >= 0.7) {
+      if (Math.random() >= 0.6) {
         await this.page.keyboard.press("Space", { delay: 250 });
         await this.page.mouse.click(100, 100, { button: "right", delay: 650 });
       }
@@ -139,7 +140,7 @@ export class Player {
   public async raceWithGpt4(intervalMs: number) {
     console.log("RACING WITH GPT-4");
     this.currentState = PlayerState.RacingWithGpt4;
-    nonBlockingWhile(
+    nonBlockingWhile(() => 
       this.currentState == PlayerState.RacingWithGpt4,
       async () => {
         const screenshotBase64 = await this.page.screenshot({
@@ -156,9 +157,11 @@ export class Player {
           response = await this.promptVisionGpt4(screenshotBase64);
         };
         const jumpAndSlide = async () => {
-          await this.page.keyboard.press("Space");
-          await sleep(SLIDE_DELAY_AFTER_JUMP);
-          await this.page.mouse.click(100, 100, { button: "right" });
+          await this.page.keyboard.press("Space", { delay: 250 });
+          await this.page.mouse.click(100, 100, {
+            button: "right",
+            delay: 650,
+          });
           await sleep(500);
         };
         await Promise.all([getResponse(), jumpAndSlide()]);
@@ -219,6 +222,9 @@ export class Player {
             selectedKeys.push("w");
             selectedKeys.push("d");
             break;
+          case "backwards":
+            selectedKeys.push("s");
+            break;
           case "nothing":
             break;
           default:
@@ -231,15 +237,15 @@ export class Player {
           await this.page.keyboard.down(key);
         }
 
-        let RightClickDelayMs = 0;
         if (jump) {
-          RightClickDelayMs = SLIDE_DELAY_AFTER_JUMP;
-          await this.page.keyboard.press("Space");
-          await sleep(RightClickDelayMs);
-          await this.page.mouse.click(100, 100, { button: "right" });
+          await this.page.keyboard.press("Space", { delay: 250 });
+          await this.page.mouse.click(100, 100, {
+            button: "right",
+            delay: 650,
+          });
         }
 
-        await sleep(intervalMs - RightClickDelayMs);
+        await sleep(intervalMs);
 
         for (const key of selectedKeys) {
           await this.page.keyboard.up(key);
