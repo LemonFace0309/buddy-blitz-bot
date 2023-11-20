@@ -43,7 +43,7 @@ export class Client {
     // Set timeout so we don't loop infinitely
     const timeout = setTimeout(() => {
       throw new Error("Timeout: Could not find avatar selection button");
-    }, 60000);
+    }, 120000);
 
     // Keep checking DOM if spam element exists. Once it's there, close it.
     // Get rid of the character selection screen
@@ -89,7 +89,7 @@ export class Client {
     // Set timeout so we don't loop infinitely
     const timeout = setTimeout(() => {
       throw new Error("Timeout: Could not enter drag to rotate");
-    }, 60000);
+    }, 120000);
 
     // Keep checking DOM if button exists. Once it's there, close it.
     // Loop until we can find the button

@@ -47,10 +47,7 @@ async function start() {
 
   page.on("console", async (msg) => {
     // Rewards Screen
-    if (
-      msg.text().includes(CONSOLE_PREFIX + CONSOLE_RESULTS_SCREEN_WIN) ||
-      msg.text().includes(CONSOLE_PREFIX + CONSOLE_RESULTS_SCREEN_LOSE)
-    ) {
+    if (msg.text().includes(CONSOLE_PREFIX + CONSOLE_RESULTS_SCREEN_WIN)) {
       await player.claimRewards();
 
       // No console message for entering waitroom yet, so just manually go there
