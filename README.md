@@ -2,12 +2,15 @@
 
 ## Getting Started
 
-First build the bot
+1. First, create a `.env` file with your `OPENAI_API_KEY`
+
+
+2. Build the bot
 ```
 yarn build
 ```
 
-Then run it
+3. Then run it
 ```
 yarn start
 ```
