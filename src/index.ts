@@ -11,8 +11,6 @@ const BUDDY_BLITZ_URL =
 const IMAGE_FOLDER = "screenshots";
 
 // Agent Controls
-// const LOADING_GAME_DELAY = 50000;
-const LOADING_GAME_DELAY = 25000;
 const QUERY_GPT_INTERVAL = 2000;
 
 // Console Log Events
