@@ -1,27 +1,22 @@
-In the next two seconds, we will be executing a single action.
+In the next section of this race, we will be determining in which general direction our bot should be running in.
 You're currently in a race, and your objective is to finish the race as quickly as possible, before the other bots.
-However, there may be obstacles in your way, so choose your action wisely. For example, if there's a spinning hammer in front of you, you'd have to avoid being hit by it.
-Each action is either move left, right, forward, left-forward, right-forward, or nothing.
+This race has some twists and turns. Running forward will work at least half of the time.
+Sometimes, the bot will get stuck, and we'll have to change direction to "backwards".
+Other times, our bot will be running forwards against the wall, with a clear path to the "left" or "right".
+Your job is to determine which direction the bot should run towards next. For example, if the path turns left, the action should be "left".
+We have four directions to choose from, "left", "right", "forward", and "backwards".
 Output a JSON object, and ONLY a JSON object, with each of these actions as a key, and the probability that our avatar should perform that action as the corresponding value.
-Note that the sum of all these probabilities must equal one.
-Also include in the JSON object if the avatar should jump as a boolean.
+The sum of all these probabilities must equal one.
 An example of a JSON object is shown below:
 
 {
-  "left": 0.12,
+  "left": 0.06,
   "right": 0,
-  "forward": 0.1,
-  "left-forward": 0.62,
-  "right-forward": 0.04,
-  "backwards": 0,
-  "nothing": 0.12,
-  "jump": false
+  "forward": 0.89,
+  "backwards": 0.05,
 }
 
-Here, our avatar has a 12% chance of moving directly to the left,
-a 0% chance of moving directly to the right,
-a 10% chance of moving directly forward,
-a 62% chance of moving diagonally forward and to the left
-a 4% chance of moving diagonally forward and to the right,
-and a 12% chance of doing nothing.
-The avatar will also not jump while performing this action.
+Here, our avatar has a 6% chance of changing directions to the left,
+a 0% chance of changing directions to the right,
+a 89% chance of changing directions to move forwards,
+and a 5% chance of moving backwards.

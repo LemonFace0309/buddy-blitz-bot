@@ -1,9 +1,9 @@
 import fs from "fs";
 import path from "path";
 
-import { KeyInput, Page } from "puppeteer";
-import OpenAI from "openai";
 import "dotenv/config";
+import OpenAI from "openai";
+import { KeyInput, Page } from "puppeteer";
 
 import { nonBlockingWhile, sleep } from "./utils";
 
@@ -14,14 +14,7 @@ const PROMPT = fs.readFileSync(
   "utf-8"
 );
 
-type RandomAction =
-  | "left"
-  | "right"
-  | "forward"
-  | "left-forward"
-  | "right-forward"
-  | "backwards"
-  | "nothing";
+type RandomAction = "left" | "right" | "forward" | "backwards";
 type ControlledAction = "jump";
 
 type RandomActionProbabilities = Record<RandomAction, number>;
@@ -37,9 +30,12 @@ enum PlayerState {
   RacingWithGpt4,
 }
 
+type Direction = "w" | "a" | "s" | "d";
+
 export class Player {
   page: Page;
   openai: OpenAI;
+  currentDirection: Direction;
   currentState: PlayerState;
 
   constructor(page: Page) {
@@ -48,8 +44,9 @@ export class Player {
     }
 
     this.page = page;
-    this.currentState = PlayerState.Idle;
     this.openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+    this.currentDirection = "w";
+    this.currentState = PlayerState.Idle;
   }
 
   public async queueGame() {
@@ -81,203 +78,144 @@ export class Player {
   public async degen() {
     console.log("Degen");
     this.currentState = PlayerState.Degen;
-    nonBlockingWhile(() => this.currentState == PlayerState.Degen, async () => {
-      // Randomly move forward or backwards
-      const keys: KeyInput[] = ["w", "s"];
-      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-      await this.page.keyboard.down(keyToPress);
-
-      // Maybe press 'Space' to jump
-      if (Math.random() >= 0.5) {
-        await this.page.keyboard.press("Space");
-      }
-
-      // Maybe randomly press 'a' or 'd' for left or right
-      if (Math.random() >= 0.5) {
-        const keys: KeyInput[] = ["a", "d"];
+    nonBlockingWhile(
+      () => this.currentState == PlayerState.Degen,
+      async () => {
+        // Randomly move forward or backwards
+        const keys: KeyInput[] = ["w", "s"];
         const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-        await this.page.keyboard.press(keyToPress, { delay: 300 });
-      }
+        await this.page.keyboard.down(keyToPress);
 
-      await this.page.keyboard.up(keyToPress);
-    });
+        // Maybe press 'Space' to jump
+        if (Math.random() >= 0.5) {
+          await this.page.keyboard.press("Space");
+        }
+
+        // Maybe randomly press 'a' or 'd' for left or right
+        if (Math.random() >= 0.5) {
+          const keys: KeyInput[] = ["a", "d"];
+          const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+          await this.page.keyboard.press(keyToPress, { delay: 300 });
+        }
+
+        await this.page.keyboard.up(keyToPress);
+      }
+    );
   }
 
   public async claimRewards() {
     console.log("Rewards Screen");
     this.currentState = PlayerState.Idle;
-    await sleep(15000);
-    await this.page.mouse.click(500, 500, { delay: 500 });
-    await this.page.mouse.click(500, 500, { delay: 500 });
-    await this.page.mouse.click(500, 500, { delay: 500 });
+    nonBlockingWhile(
+      () => this.currentState == PlayerState.Idle,
+      async () => {
+        // close sign up banner if it exists
+        await this.page.evaluate(() => {
+          const buttons = Array.from(
+            document.querySelectorAll("button:has(svg)")
+          ) as Array<HTMLButtonElement | undefined>;
+          const targetButton = buttons.find(
+            (button) =>
+              button?.classList.contains("absolute") &&
+              button?.classList.contains("-right-3") &&
+              button?.classList.contains("-top-3")
+          );
+          if (targetButton) {
+            targetButton.click();
+          }
+        });
+        // await this.page.mouse.click(645, 530, { delay: 500 });
+
+        // click continue
+        await this.page.mouse.click(390, 555, { delay: 500 });
+        await this.page.mouse.click(390, 555, { delay: 500 });
+      }
+    );
   }
 
   public async race(intervalMs: number) {
     console.log("RUNNING FORWARDS");
     this.currentState = PlayerState.Racing;
-    nonBlockingWhile(() => this.currentState == PlayerState.Racing, async () => {
-      await this.page.keyboard.down("w");
-
-      // Maybe press 'Space' to jump
-      if (Math.random() >= 0.6) {
-        await this.page.keyboard.press("Space", { delay: 250 });
-        await this.page.mouse.click(100, 100, { button: "right", delay: 650 });
+    this.currentDirection = "w";
+    nonBlockingWhile(
+      () => this.currentState == PlayerState.Racing,
+      async () => {
+        await this.run(intervalMs);
       }
-
-      // Maybe randomly press 'a' or 'd' for left or right
-      if (Math.random() >= 0.8) {
-        const keys: KeyInput[] = ["a", "d"];
-        const keyToPress = keys[Math.floor(Math.random() * keys.length)];
-        await this.page.keyboard.press(keyToPress, { delay: intervalMs });
-      } else {
-        await sleep(intervalMs);
-      }
-
-      await this.page.keyboard.up("w");
-    });
+    );
   }
 
   public async raceWithGpt4(intervalMs: number) {
     console.log("RACING WITH GPT-4");
     this.currentState = PlayerState.RacingWithGpt4;
-    nonBlockingWhile(() => 
-      this.currentState == PlayerState.RacingWithGpt4,
+    this.currentDirection = "w";
+
+    // run in this.currentDirection
+    nonBlockingWhile(
+      () => this.currentState == PlayerState.RacingWithGpt4,
+      async () => {
+        await this.run(2000);
+      }
+    );
+
+    // prompt gpt-4 to change this.currentDirection
+    nonBlockingWhile(
+      () => this.currentState == PlayerState.RacingWithGpt4,
       async () => {
         const screenshotBase64 = await this.page.screenshot({
           encoding: "base64",
           type: "jpeg",
         });
 
-        await this.page.keyboard.down("w");
+        const dir = await this.getNewDirection(screenshotBase64);
 
-        let response: OpenAI.Chat.Completions.ChatCompletion | undefined =
-          undefined;
-
-        const getResponse = async () => {
-          response = await this.promptVisionGpt4(screenshotBase64);
-        };
-        const jumpAndSlide = async () => {
-          await this.page.keyboard.press("Space", { delay: 250 });
-          await this.page.mouse.click(100, 100, {
-            button: "right",
-            delay: 650,
-          });
-          await sleep(500);
-        };
-        await Promise.all([getResponse(), jumpAndSlide()]);
-
-        if (typeof response == "undefined") {
-          console.log("Failed to get response from AI");
-          return;
+        if (!dir) {
+          console.log("Failed to get direction from AI");
+          this.currentDirection = "w";
         } else {
-          response = response as OpenAI.Chat.Completions.ChatCompletion;
-          console.log("AI RESPONSE:", response);
-        }
-
-        console.log("RESPONSE:");
-        console.dir(response, { depth: 8 });
-
-        const content = response.choices[0].message.content;
-        if (!content) {
-          console.log("Failed to get response from AI");
-          return;
-        } else {
-          console.log("AI RESPONSE:", content);
-        }
-
-        let jsonContent = content.substring(
-          content.indexOf("{"),
-          content.indexOf("}") + 1
-        );
-        jsonContent.replaceAll("\\", "");
-
-        let possibleActions: ActionProbabilities;
-        try {
-          possibleActions = JSON.parse(jsonContent);
-        } catch (err) {
-          console.log("Failed to parse JSON:", jsonContent);
-          return;
-        }
-        const jump = possibleActions.jump;
-        const selectedAction = this.selectAction(possibleActions);
-
-        const selectedKeys: KeyInput[] = [];
-
-        console.log("SELECTED ACTION:", selectedAction);
-        switch (selectedAction) {
-          case "left":
-            selectedKeys.push("a");
-            break;
-          case "right":
-            selectedKeys.push("d");
-            break;
-          case "forward":
-            selectedKeys.push("w");
-            break;
-          case "left-forward":
-            selectedKeys.push("w");
-            selectedKeys.push("a");
-            break;
-          case "right-forward":
-            selectedKeys.push("w");
-            selectedKeys.push("d");
-            break;
-          case "backwards":
-            selectedKeys.push("s");
-            break;
-          case "nothing":
-            break;
-          default:
-            throw new Error("Invalid action");
-        }
-
-        await this.page.keyboard.up("w");
-
-        for (const key of selectedKeys) {
-          await this.page.keyboard.down(key);
-        }
-
-        if (jump) {
-          await this.page.keyboard.press("Space", { delay: 250 });
-          await this.page.mouse.click(100, 100, {
-            button: "right",
-            delay: 650,
-          });
+          this.currentDirection = dir;
         }
 
         await sleep(intervalMs);
-
-        for (const key of selectedKeys) {
-          await this.page.keyboard.up(key);
-        }
       }
     );
   }
 
-  private isRandomAction(action: string): action is RandomAction {
-    // super unmaintainble. Refactor later
-    const validActions: RandomAction[] = [
-      "left",
-      "right",
-      "forward",
-      "left-forward",
-      "right-forward",
-      "nothing",
-    ];
-    return validActions.includes(action as RandomAction);
+  private async run(durationMs: number) {
+    await this.page.keyboard.down(this.currentDirection);
+
+    // Maybe press 'Space' to jump
+    if (Math.random() >= 0.6) {
+      await this.page.keyboard.press("Space", { delay: 250 });
+      await this.page.mouse.click(100, 100, {
+        button: "right",
+        delay: 650,
+      });
+    }
+
+    // Maybe randomly press 'a' or 'd' for left or right
+    if (Math.random() >= 0.6 && ["w", "s"].includes(this.currentDirection)) {
+      const keys: KeyInput[] = ["a", "d"];
+      const keyToPress = keys[Math.floor(Math.random() * keys.length)];
+      await this.page.keyboard.press(keyToPress, { delay: durationMs });
+    } else {
+      await sleep(durationMs);
+    }
+
+    await this.page.keyboard.up(this.currentDirection);
   }
 
   private selectAction(probabilities: RandomActionProbabilities): RandomAction {
-    const entries = Object.entries(probabilities);
+    const entries = Object.entries(probabilities) as Array<
+      [RandomAction, number]
+    >;
 
     let totalProb = 0;
     const probArray: Array<[RandomAction, number]> = [];
 
     for (const [key, value] of entries) {
-      if (typeof value == "number" && this.isRandomAction(key)) {
-        totalProb += value;
-        probArray.push([key, totalProb]);
-      }
+      totalProb += value;
+      probArray.push([key, totalProb]);
     }
 
     const random = Math.random() * totalProb;
@@ -289,38 +227,79 @@ export class Player {
     return probArray[probArray.length - 1][0];
   }
 
-  private async promptVisionGpt4(
+  private async getNewDirection(
     screenshotBase64: string
-  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  ): Promise<Direction | undefined> {
     console.log("Prompting GPT-4 Vision");
-    const response = await this.openai.chat.completions.create({
-      model: "gpt-4-vision-preview",
-      max_tokens: 512,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a bot for Buddy Blitz, a simulation I'm developed. You are designed to output JSON, and only JSON",
-        },
-        {
-          role: "system",
-          content:
-            "I've taken a screenshot of what the current screen looks like. You are controlling ths white avatar in the centre of the screen.",
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: PROMPT },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${screenshotBase64}`,
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-4-vision-preview",
+        max_tokens: 512,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a bot for Buddy Blitz, a simulation I'm developed. You are designed to output JSON, and only JSON.",
+          },
+          {
+            role: "system",
+            content:
+              "I've taken a screenshot of what the current screen looks like. You are controlling ths white avatar in the centre of the screen.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: PROMPT },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${screenshotBase64}`,
+                },
               },
-            },
-          ],
-        },
-      ],
-    });
-    return response;
+            ],
+          },
+        ],
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) {
+        console.log("Failed to get response from AI");
+        return undefined;
+      } else {
+        console.log("AI RESPONSE:", content);
+      }
+      let jsonContent = content.substring(
+        content.indexOf("{"),
+        content.indexOf("}") + 1
+      );
+      jsonContent.replaceAll("\\", "");
+
+      const possibleActions = JSON.parse(jsonContent);
+      const selectedAction = this.selectAction(possibleActions);
+
+      console.log("SELECTED ACTION:", selectedAction);
+      let dir: Direction | undefined;
+      switch (selectedAction) {
+        case "left":
+          dir = "a";
+          break;
+        case "right":
+          dir = "d";
+          break;
+        case "forward":
+          dir = "w";
+          break;
+        case "backwards":
+          dir = "s";
+          break;
+        default:
+          dir = undefined;
+          console.log("Received invalid action:", selectedAction);
+      }
+      return dir;
+    } catch (err) {
+      console.log("Error with GPT-4 Vision:", err);
+      return undefined;
+    }
   }
 }

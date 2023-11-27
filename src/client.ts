@@ -1,6 +1,5 @@
 import fs from "fs";
 import { Page } from "puppeteer";
-import { sleep } from "./utils";
 
 export class Client {
   page: Page;
