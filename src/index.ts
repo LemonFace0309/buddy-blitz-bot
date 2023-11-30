@@ -25,10 +25,10 @@ async function start() {
   try {
     // Launch the browser
     console.log("Launching Browser");
-    const browser = await puppeteer.launch({ headless: "new" });
-    // const browser = await puppeteer.launch({
-    //   headless: false,
-    // });
+    // const browser = await puppeteer.launch({ headless: "new" });
+    const browser = await puppeteer.launch({
+      headless: false,
+    });
     const page = await browser.newPage();
     await page.setViewport({ width: 800, height: 600 });
 
@@ -76,7 +76,7 @@ async function start() {
 }
 
 async function main() {
-  const browserInstances = Array.from({ length: 2 }).map(start);
+  const browserInstances = Array.from({ length: 1 }).map(start);
   Promise.all(browserInstances);
 
   // Run an interval for 30 minutes at a time

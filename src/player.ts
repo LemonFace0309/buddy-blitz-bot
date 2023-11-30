@@ -1,13 +1,14 @@
 import fs from "fs";
+
 import path from "path";
 
 import "dotenv/config";
-import OpenAI from "openai";
+import Replicate from "replicate";
 import { KeyInput, Page } from "puppeteer";
 
 import { nonBlockingWhile, sleep } from "./utils";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
 const PROMPT = fs.readFileSync(
   path.join(process.cwd(), "src", "prompt.txt"),
@@ -34,17 +35,19 @@ type Direction = "w" | "a" | "s" | "d";
 
 export class Player {
   page: Page;
-  openai: OpenAI;
+  replicate: Replicate;
   currentDirection: Direction;
   currentState: PlayerState;
 
   constructor(page: Page) {
-    if (!OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not defined");
+    if (!REPLICATE_API_TOKEN) {
+      throw new Error("REPLICATE_API_TOKEN is not defined");
     }
 
     this.page = page;
-    this.openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+    this.replicate = new Replicate({
+      auth: process.env.REPLICATE_API_TOKEN,
+    });
     this.currentDirection = "w";
     this.currentState = PlayerState.Idle;
   }
@@ -227,52 +230,30 @@ export class Player {
     return probArray[probArray.length - 1][0];
   }
 
-  private async getNewDirection(
+  public async getNewDirection(
     screenshotBase64: string
   ): Promise<Direction | undefined> {
     console.log("Prompting GPT-4 Vision");
     try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-4-vision-preview",
-        max_tokens: 512,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a bot for Buddy Blitz, a simulation I'm developed. You are designed to output JSON, and only JSON.",
+      const output: any = await this.replicate.run(
+        "yorickvp/llava-13b:e272157381e2a3bf12df3a8edd1f38d1dbd736bbb7437277c8b34175f8fce358",
+        {
+          input: {
+            image: `data:image/jpeg;base64,${screenshotBase64}`,
+            prompt: PROMPT,
+            temperature: 0.3,
           },
-          {
-            role: "system",
-            content:
-              "I've taken a screenshot of what the current screen looks like. You are controlling ths white avatar in the centre of the screen.",
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: PROMPT },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${screenshotBase64}`,
-                },
-              },
-            ],
-          },
-        ],
-      });
-
-      const content = response.choices[0].message.content;
-      if (!content) {
-        console.log("Failed to get response from AI");
-        return undefined;
-      } else {
-        console.log("AI RESPONSE:", content);
-      }
-      let jsonContent = content.substring(
-        content.indexOf("{"),
-        content.indexOf("}") + 1
+        }
       );
-      jsonContent.replaceAll("\\", "");
+
+      let outputString = output.join("");
+      outputString = outputString.replace(/,\n\s*}/, "\n}");
+      let jsonContent = outputString.substring(
+        outputString.indexOf("{"),
+        outputString.indexOf("}") + 1
+      );
+
+      console.log("prediction output:", jsonContent);
 
       const possibleActions = JSON.parse(jsonContent);
       const selectedAction = this.selectAction(possibleActions);
