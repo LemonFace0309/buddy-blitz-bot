@@ -185,7 +185,8 @@ export class Player {
   }
 
   private async run(durationMs: number) {
-    await this.page.keyboard.down(this.currentDirection);
+    const currentDirection = this.currentDirection;
+    await this.page.keyboard.down(currentDirection);
 
     // Maybe press 'Space' to jump
     if (Math.random() >= 0.6) {
@@ -197,7 +198,7 @@ export class Player {
     }
 
     // Maybe randomly press 'a' or 'd' for left or right
-    if (Math.random() >= 0.6 && ["w", "s"].includes(this.currentDirection)) {
+    if (Math.random() >= 0.6 && ["w", "s"].includes(currentDirection)) {
       const keys: KeyInput[] = ["a", "d"];
       const keyToPress = keys[Math.floor(Math.random() * keys.length)];
       await this.page.keyboard.press(keyToPress, { delay: durationMs });
@@ -205,7 +206,7 @@ export class Player {
       await sleep(durationMs);
     }
 
-    await this.page.keyboard.up(this.currentDirection);
+    await this.page.keyboard.up(currentDirection);
   }
 
   private selectAction(probabilities: RandomActionProbabilities): RandomAction {
@@ -233,7 +234,7 @@ export class Player {
   public async getNewDirection(
     screenshotBase64: string
   ): Promise<Direction | undefined> {
-    console.log("Prompting GPT-4 Vision");
+    console.log("Prompting LLaVa");
     try {
       const output: any = await this.replicate.run(
         "yorickvp/llava-13b:e272157381e2a3bf12df3a8edd1f38d1dbd736bbb7437277c8b34175f8fce358",
@@ -241,7 +242,7 @@ export class Player {
           input: {
             image: `data:image/jpeg;base64,${screenshotBase64}`,
             prompt: PROMPT,
-            temperature: 0.3,
+            temperature: 0.5,
           },
         }
       );
