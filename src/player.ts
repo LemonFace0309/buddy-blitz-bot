@@ -56,6 +56,7 @@ export class Player {
     // Join a game queue
 
     console.log("QUEUEING GAME");
+    await this.page.keyboard.press("Escape", { delay: 500 });
     await this.page.keyboard.press("j", { delay: 500 });
 
     // const viewport = this.page.viewport();

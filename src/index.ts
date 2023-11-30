@@ -11,7 +11,7 @@ const BUDDY_BLITZ_URL =
 const IMAGE_FOLDER = "screenshots";
 
 // Agent Controls
-const QUERY_GPT_INTERVAL = 6000;
+const QUERY_GPT_INTERVAL = 5000;
 
 // Console Log Events
 const CONSOLE_PREFIX = "SpatialGame: ";
@@ -21,14 +21,14 @@ const CONSOLE_LOBBY = "Client: Enter Lobby";
 const CONSOLE_LOADING_GAME = "Client: Selecting stage";
 const CONSOLE_IN_GAME = "Client: Gameplay";
 
-async function start() {
+async function start(useGpt = false) {
   try {
     // Launch the browser
     console.log("Launching Browser");
-    // const browser = await puppeteer.launch({ headless: "new" });
-    const browser = await puppeteer.launch({
-      headless: false,
-    });
+    const browser = await puppeteer.launch({ headless: "new" });
+    // const browser = await puppeteer.launch({
+    //   headless: false,
+    // });
     const page = await browser.newPage();
     await page.setViewport({ width: 800, height: 600 });
 
@@ -63,7 +63,11 @@ async function start() {
 
       // In Game
       if (msg.text().includes(CONSOLE_PREFIX + CONSOLE_IN_GAME)) {
-        player.raceWithGpt4(QUERY_GPT_INTERVAL);
+        if (useGpt) {
+          player.raceWithGpt4(QUERY_GPT_INTERVAL);
+        } else {
+          player.race(1200);
+        }
       }
     });
 
@@ -76,12 +80,24 @@ async function start() {
 }
 
 async function main() {
-  const browserInstances = Array.from({ length: 1 }).map(start);
+  const browserInstances = Array.from({ length: 3 }).map(() => {
+    if (Math.random() >= 0.75) {
+      return start(true);
+    } else {
+      return start(false);
+    }
+  });
   Promise.all(browserInstances);
 
   // Run an interval for 30 minutes at a time
   setInterval(async () => {
-    const browserInstances = Array.from({ length: 3 }).map(start);
+    const browserInstances = Array.from({ length: 3 }).map(() => {
+      if (Math.random() >= 0.75) {
+        return start(true);
+      } else {
+        return start(false);
+      }
+    });
     Promise.all(browserInstances);
   }, 30 * 60 * 1000);
 }
